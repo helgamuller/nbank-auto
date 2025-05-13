@@ -1,4 +1,4 @@
-package iteration2;
+package iteration1;
 
 import io.restassured.RestAssured;
 import io.restassured.filter.log.ErrorLoggingFilter;
@@ -7,7 +7,6 @@ import io.restassured.filter.log.ResponseLoggingFilter;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import org.apache.http.HttpStatus;
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
