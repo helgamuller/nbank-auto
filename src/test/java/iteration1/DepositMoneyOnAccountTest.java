@@ -1,4 +1,4 @@
-package iteration2;
+package iteration1;
 
 import io.restassured.RestAssured;
 import io.restassured.filter.log.ErrorLoggingFilter;
@@ -236,7 +236,7 @@ public class DepositMoneyOnAccountTest {
                 .assertThat()
                 .statusCode(HttpStatus.SC_CREATED);
 
-        //get Token
+                //get Token
 
         //make  a deposit
         given()
