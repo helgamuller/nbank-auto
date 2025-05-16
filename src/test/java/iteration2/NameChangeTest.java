@@ -1,4 +1,4 @@
-package iteration1;
+package iteration2;
 
 import io.restassured.RestAssured;
 import io.restassured.filter.log.RequestLoggingFilter;
@@ -68,21 +68,21 @@ public class NameChangeTest {
 
 
         //change a name
-            given()
-                    .contentType(ContentType.JSON)
-                    .accept(ContentType.JSON)
-                    .header("Authorization", userAuthHeader)
-                    .body("""
+        given()
+                .contentType(ContentType.JSON)
+                .accept(ContentType.JSON)
+                .header("Authorization", userAuthHeader)
+                .body("""
                         {
                            "name": "olga M"
                            
                         }
                         """)
-                    .put("http://localhost:4111/api/v1/customer/profile")
-                    .then()
-                    .assertThat()
-                    .statusCode(HttpStatus.SC_OK)
-                    .body("customer.name", Matchers.equalTo("olga M"));
+                .put("http://localhost:4111/api/v1/customer/profile")
+                .then()
+                .assertThat()
+                .statusCode(HttpStatus.SC_OK)
+                .body("customer.name", Matchers.equalTo("olga M"));
     }
     public static Stream<Arguments> invalidNameData(){
         return Stream.of(
@@ -91,7 +91,7 @@ public class NameChangeTest {
                 Arguments.of("olga"),
                 Arguments.of("olga olga olga"),
                 Arguments.of("!12$%^& *()")
-               // Arguments.of(null)
+                // Arguments.of(null)
 
 
         );

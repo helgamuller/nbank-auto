@@ -1,4 +1,4 @@
-package iteration1;
+package iteration2;
 
 import io.restassured.RestAssured;
 import io.restassured.filter.log.ErrorLoggingFilter;
