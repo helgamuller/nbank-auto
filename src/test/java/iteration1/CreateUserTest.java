@@ -1,9 +1,13 @@
 package iteration1;
 
+import generators.RandomData;
 import io.restassured.RestAssured;
 import io.restassured.filter.log.RequestLoggingFilter;
 import io.restassured.filter.log.ResponseLoggingFilter;
 import io.restassured.http.ContentType;
+import models.CreateUserRequest;
+import models.CreateUserResponse;
+import models.UserRole;
 import org.apache.http.HttpStatus;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeAll;
@@ -11,52 +15,42 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import requests.AdminCreateUserRequester;
+import specs.RequestSpecs;
+import specs.ResponseSpecs;
 
 import java.util.List;
 import java.util.stream.Stream;
 
-import static io.restassured.RestAssured.given;
+import static io.restassured.RestAssured.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class CreateUserTest {
-    @BeforeAll
-    public static void setupRestAssured(){
-        RestAssured.filters(
-                List.of(new RequestLoggingFilter(),
-                        new ResponseLoggingFilter()));
-    }
+public class CreateUserTest extends BaseTest{
+
+
 //Username must contain only letters, digits, dashes, underscores, and dots
-    public static Stream<Arguments> userValidData(){
-        return Stream.of(
-                Arguments.of("olgaM1-_.", "Password33$", "USER", "username")
-
-        );
-    }
-    @MethodSource("userValidData")
-    @ParameterizedTest
-    public void adminCanCreateUserWithValidData(String username, String password, String role){
-        String requestBody = String.format(
-                """
-                                               {
-                           "username": "%s",
-                           "password": "%s",
-                           "role": "%s"
-                        }
-                        """, username, password, role);
-
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .header("Authorization", "Basic YWRtaW46YWRtaW4=")
-                .body(requestBody)
-                .post("http://localhost:4111/api/v1/admin/users")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_CREATED)
-                .body("username", Matchers.equalTo(username))
-                .body("password", Matchers.not(Matchers.equalTo(password)))
-                .body("role", Matchers.equalTo(role));
 
 
+
+    @Test
+    public void adminCanCreateUserWithValidData(){
+        //create userRequest(creds) with Random data for user creation
+        CreateUserRequest userRequest = CreateUserRequest.builder()
+                .username(RandomData.getUserName())
+                .password(RandomData.getUserPassword())
+                .role(UserRole.USER.toString())
+                .build();
+//admin creates user
+        CreateUserResponse createUserResponse =  new AdminCreateUserRequester(
+                RequestSpecs.adminSpec(),
+                ResponseSpecs.entityWasCreated())
+                .post(userRequest)
+                .extract()
+                .as(CreateUserResponse.class);
+
+        softly.assertThat(userRequest.getUsername()).isEqualTo(createUserResponse.getUsername());
+        softly.assertThat(userRequest.getPassword()).isNotEqualTo(createUserResponse.getPassword());
+        softly.assertThat(userRequest.getRole()).isEqualTo(createUserResponse.getRole());
     }
 
     public static Stream<Arguments> userInvalidData(){
@@ -70,25 +64,18 @@ public class CreateUserTest {
     @ParameterizedTest
     @MethodSource("userInvalidData")
     public void adminCanNotCreateUserWithInvalidData(String username, String password, String role, String errorKey, String errorValue){
-        String requestBody = String.format(
-                """
-                                               {
-                           "username": "%s",
-                           "password": "%s",
-                           "role": "%s"
-                        }
-                        """, username, password, role);
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .header("Authorization", "Basic YWRtaW46YWRtaW4=")
-                .body(requestBody)
-                .post("http://localhost:4111/api/v1/admin/users")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_BAD_REQUEST)
-                .body(errorKey, Matchers.equalTo(errorValue));
 
+        //create userRequest(creds) with Random data for user creation
+        CreateUserRequest userRequest = CreateUserRequest.builder()
+                .username(username)
+                .password(password)
+                .role(role)
+                .build();
+//admin creates user
+       new AdminCreateUserRequester(
+                RequestSpecs.adminSpec(),
+                ResponseSpecs.requestReturnsBadRequest(errorKey,errorValue))
+                .post(userRequest);
 
 
     }
