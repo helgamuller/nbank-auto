@@ -1,19 +1,11 @@
 package iteration2;
 
 import generators.RandomData;
-import io.restassured.RestAssured;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import io.restassured.http.ContentType;
 import iteration1.BaseTest;
 import models.ChangeNameRequest;
 import models.ChangeNameResponse;
 import models.CreateUserRequest;
 import models.UserRole;
-import org.apache.http.HttpStatus;
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -23,11 +15,7 @@ import requests.ChangeNameRequester;
 import specs.RequestSpecs;
 import specs.ResponseSpecs;
 
-import java.util.List;
-import java.util.UUID;
 import java.util.stream.Stream;
-
-import static io.restassured.RestAssured.given;
 
 public class NameChangeTest extends BaseTest {
 
@@ -104,12 +92,11 @@ public class NameChangeTest extends BaseTest {
 
 
     }
-
     @Test
     public void unauthorizedUserCanNotChangeNameTest() {
 
         ChangeNameRequest changeName = ChangeNameRequest.builder()
-                .name("Olga M")
+                .name(RandomData.getNewUserName())
                 .build();
 
         new ChangeNameRequester(

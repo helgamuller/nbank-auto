@@ -1,18 +1,9 @@
 package iteration2;
 
 import generators.RandomData;
-import io.restassured.RestAssured;
-import io.restassured.filter.log.ErrorLoggingFilter;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import io.restassured.http.ContentType;
-import io.restassured.response.Response;
 import iteration1.BaseTest;
 import models.*;
-import org.apache.http.HttpStatus;
 import org.assertj.core.api.BooleanAssert;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -25,11 +16,8 @@ import specs.RequestSpecs;
 import specs.ResponseSpecs;
 
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Stream;
 
-import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class DepositMoneyOnAccountTest extends BaseTest {
@@ -153,7 +141,7 @@ public class DepositMoneyOnAccountTest extends BaseTest {
     }
     @Test
     public void unauthorizedUserCanNotMakeDepositTest() {
-        Float amount = 100.0f;
+        Float amount = RandomData.randomTransfer(1.0f, 100.0f);
         //create user by admin
         CreateUserRequest userRequest = CreateUserRequest.builder()
                 .username(RandomData.getUserName())
@@ -202,8 +190,8 @@ public class DepositMoneyOnAccountTest extends BaseTest {
                 ResponseSpecs.entityWasCreated())
                 .post(userRequest);
 
-        int account = 104;
-        float amount = 100.0f;
+        int account = Integer.MAX_VALUE;
+        float amount = RandomData.randomTransfer(1.0f, 100.0f);
 
         //make a deposit
         MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()

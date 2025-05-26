@@ -2,7 +2,10 @@ package generators;
 
 import org.apache.commons.lang3.RandomStringUtils;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class RandomData {
     private RandomData(){}
@@ -18,5 +21,10 @@ public class RandomData {
     }
     public static String getNewUserName(){
         return RandomStringUtils.randomAlphabetic(3).toUpperCase() + " " + RandomStringUtils.randomAlphabetic(4).toLowerCase();
+
+    }
+    public static float randomTransfer (float min, float max){
+        float rnd = ThreadLocalRandom.current().nextFloat(min, max);
+        return Math.round(rnd*100f)/100f;
     }
 }
