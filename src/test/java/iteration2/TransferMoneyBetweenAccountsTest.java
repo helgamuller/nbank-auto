@@ -1,18 +1,8 @@
 package iteration2;
 
 import generators.RandomData;
-import io.restassured.RestAssured;
-import io.restassured.filter.log.ErrorLoggingFilter;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import io.restassured.http.ContentType;
-import io.restassured.response.Response;
 import iteration1.BaseTest;
 import models.*;
-import org.apache.http.HttpStatus;
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -21,14 +11,9 @@ import requests.*;
 import specs.RequestSpecs;
 import specs.ResponseSpecs;
 
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Stream;
 
-import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.within;
 import static org.hamcrest.Matchers.equalTo;
 
 public class TransferMoneyBetweenAccountsTest extends BaseTest {
@@ -105,10 +90,10 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .extract()
                 .as(MakeTransferResponse.class);
 
-        softly.assertThat(transfer.getAmount()==transferAmount);
-        softly.assertThat(transfer.getSenderAccountId()==senderAccountId);
-        softly.assertThat(transfer.getReceiverAccountId()==receiverAccountId);
-        softly.assertThat(transfer.getMessage().equals("Transfer successful"));
+        softly.assertThat(transfer.getAmount()).isEqualTo(transferAmount);
+        softly.assertThat(transfer.getSenderAccountId()).isEqualTo(senderAccountId);
+        softly.assertThat(transfer.getReceiverAccountId()).isEqualTo(receiverAccountId);
+        softly.assertThat(transfer.getMessage()).isEqualTo("Transfer successful");
 
         //check transfer-out in senderAccount
         List <Transaction> senderAccountTransactions = new RetrieveAccountTransactionsRequester(
@@ -260,7 +245,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         int receiverAccountId = createReceiverAccount.getId();
 
         //prepare deposit data
-        float depositAmount = 100.0f;
+        float depositAmount = RandomData.randomTransfer(0.01f, 100.0f);
         MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
                 .id(senderAccountId)
                 .balance(depositAmount)
@@ -273,7 +258,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .post(makeDepositRequest);
 
         //prepare transfer request data
-        float transferAmount = 50.0f;
+        float transferAmount = depositAmount;
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
                 .amount(transferAmount)
                 .receiverAccountId(receiverAccountId)
@@ -305,7 +290,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .post(userRequest);
 
         //I skip creating sender account here and use variable instead
-        int senderAccountId = 19878;
+        int nonExistingAccountId = Integer.MAX_VALUE;
 
         //create sender account and convert response into the object
         CreateAccountResponse createReceiverAccount = new CreateAccountRequester(
@@ -320,11 +305,11 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
 
         //I don't need to make a deposit here
         //prepare transfer request data
-        float transferAmount = 50.0f;
+        float transferAmount = RandomData.randomTransfer(1.0f, 100.0f);
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
                 .amount(transferAmount)
                 .receiverAccountId(receiverAccountId)
-                .senderAccountId(senderAccountId)
+                .senderAccountId(nonExistingAccountId)
                 .build();
 
         //make transfer using request above
@@ -332,6 +317,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
                 ResponseSpecs.requestReturnsForbidden())
                 .post(transferRequest);
+
     }
 
     @Test
@@ -360,7 +346,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         int senderAccountId = createSenderAccount.getId();
 
         //prepare deposit data
-        float depositAmount = 100.0f;
+        float depositAmount = RandomData.randomTransfer(100.0f, 1000.0f);
         MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
                 .id(senderAccountId)
                 .balance(depositAmount)
@@ -373,10 +359,10 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .post(makeDepositRequest);
 
         //create NonExisting Receiver account
-        int receiverAccountId = 123456;
+        int receiverAccountId = Integer.MAX_VALUE;
 
         //prepare transfer request data
-        float transferAmount = 50.0f;
+        float transferAmount = depositAmount;
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
                 .amount(transferAmount)
                 .receiverAccountId(receiverAccountId)
@@ -388,6 +374,22 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
                 ResponseSpecs.requestReturnsBadNoMessage())
                 .post(transferRequest);
+
+        //get list of sender's account transactions
+        List <Transaction> senderAccountTransactions = new RetrieveAccountTransactionsRequester(
+                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                ResponseSpecs.requestReturnsOk())
+                .get(senderAccountId);
+//
+// check sender account transactions for our transfer
+        Transaction transferOut = senderAccountTransactions.stream()
+                .filter(t -> t.getType() == TransactionType.TRANSFER_OUT)
+                .filter(t -> Math.abs(t.getAmount() - transferAmount) < EPS)
+                .filter(t -> t.getRelatedAccountId() == receiverAccountId)
+                .findFirst()
+                .orElse(null);
+
+        softly.assertThat(transferOut).isNull();
 
     }
     @Test
@@ -417,7 +419,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         int senderAccountId = createSenderAccount.getId();
 
         //prepare deposit data
-        float depositAmount = 100.0f;
+        float depositAmount = RandomData.randomTransfer(100.0f, 1000.0f);
         MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
                 .id(senderAccountId)
                 .balance(depositAmount)
@@ -430,7 +432,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .post(makeDepositRequest);
 
         //prepare transfer request data where sender==receiver and sender is exists
-        float transferAmount = 50.0f;
+        float transferAmount = depositAmount;
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
                 .amount(transferAmount)
                 .receiverAccountId(senderAccountId)
@@ -442,6 +444,24 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
                 ResponseSpecs.requestReturnsBadNoMessage())
                 .post(transferRequest);
+
+        //check if transfer really wasn't sent
+        //get list of all acc's trabsactions
+        List <Transaction> senderAccountTransactions = new RetrieveAccountTransactionsRequester(
+                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                ResponseSpecs.requestReturnsOk())
+                .get(senderAccountId);
+
+        //try to find our transaction
+        Transaction transferOut = senderAccountTransactions.stream()
+                .filter(t -> t.getType() == TransactionType.TRANSFER_OUT)
+                .filter(t -> Math.abs(t.getAmount() - transferAmount) < EPS)
+                .filter(t -> t.getRelatedAccountId() == senderAccountId)
+                .findFirst()
+                .orElse(null);
+
+        //check that we didn't find a transaction
+        softly.assertThat(transferOut).isNull();
 
     }
 }
