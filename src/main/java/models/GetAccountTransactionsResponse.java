@@ -5,11 +5,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Arrays;
+import java.util.List;
 @Data
 @AllArgsConstructor //generate all thes staff int bite code
 @NoArgsConstructor
 @Builder
-public class LoginUserResponse extends BaseModel {
-    private String username;
-    private String role;
+public class GetAccountTransactionsResponse extends BaseModel{
+    List<Transaction> transactions;
+
 }

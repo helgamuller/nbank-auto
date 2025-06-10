@@ -3,77 +3,50 @@ package iteration2;
 import generators.RandomData;
 import iteration1.BaseTest;
 import models.*;
+import models.comparison.ModelAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import requests.*;
+import requests.skeleton.Endpoint;
+import requests.skeleton.requesters.CrudRequester;
+import requests.skeleton.requesters.ValidatedCrudRequester;
+import requests.steps.AdminSteps;
+import requests.steps.UserSteps;
 import specs.RequestSpecs;
 import specs.ResponseSpecs;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.hamcrest.Matchers.equalTo;
+import static java.math.RoundingMode.HALF_UP;
 
 public class TransferMoneyBetweenAccountsTest extends BaseTest {
-    private static final float EPS = 0.0001f;
 
     public static Stream<Arguments> validTransferData() {
         return Stream.of(
-                Arguments.of(10000.00f, 0.01f, "Transfer successful"),
-                        Arguments.of(10000.00f, 9999.99f, "Transfer successful"),
-                        Arguments.of(10000.00f, 10000.00f, "Transfer successful")
+                Arguments.of(new BigDecimal("5000.00"), new BigDecimal("0.01"), "Transfer successful"),
+                Arguments.of(new BigDecimal("5000.00"), new BigDecimal("9999.99"), "Transfer successful"),
+                Arguments.of(new BigDecimal("5000.00"), new BigDecimal("10000.00"), "Transfer successful")
         );
     }
 
     @ParameterizedTest
     @MethodSource("validTransferData")
-    public void userCanTransferValidAmountTest(Float depositAmount, Float transferAmount, String message) {
-        //create model for user data
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-
+    public void userCanTransferValidAmountTest(BigDecimal depositAmount, BigDecimal transferAmount, String message) throws NoSuchFieldException, IllegalAccessException {
         //admin creates user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
+        CreateUserRequest userRequest = AdminSteps.createUser();
 
-        //create sender account and convert response into the object
-        CreateAccountResponse createSenderAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-        //extract account id
-        int senderAccountId = createSenderAccount.getId();
+        // user creates sender account and gets id
+        int senderAccountId = UserSteps.createAccountAndGetId(userRequest);
 
-        //create sender account and convert response into the object
-        CreateAccountResponse createReceiverAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-        //extract account id
-        int receiverAccountId = createReceiverAccount.getId();
+        //user creates a receiving account and gets it's id
+        int receiverAccountId = UserSteps.createAccountAndGetId(userRequest);
 
-        //prepare deposit data
-        MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(senderAccountId)
-                .balance(depositAmount)
-                .build();
-
-        //make a deposit into sender account
-        new MakeDepositRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .post(makeDepositRequest);
+        //user makes two deposits into sender account(because max deposit ==5000, while max transfer ==10000)
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
 
         //prepare transfer request data
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
@@ -82,33 +55,21 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .senderAccountId(senderAccountId)
                 .build();
 
-        //make transfer request
-        MakeTransferResponse transfer = new MakeTransferRequester(
+        //send transfer and get response as a class
+        MakeTransferResponse transferResponse = new ValidatedCrudRequester<MakeTransferResponse>(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                Endpoint.ACCOUNT_TRANSFER,
                 ResponseSpecs.requestReturnsOk())
-                .post(transferRequest)
-                .extract()
-                .as(MakeTransferResponse.class);
+                .post(transferRequest);
 
-        softly.assertThat(transfer.getAmount()).isEqualTo(transferAmount);
-        softly.assertThat(transfer.getSenderAccountId()).isEqualTo(senderAccountId);
-        softly.assertThat(transfer.getReceiverAccountId()).isEqualTo(receiverAccountId);
-        softly.assertThat(transfer.getMessage()).isEqualTo("Transfer successful");
+        softly.assertThat(transferResponse.getMessage()).isEqualTo(message);
+        ModelAssertions.assertThatModels(transferRequest, transferResponse).match();
 
-        //check transfer-out in senderAccount
-        List <Transaction> senderAccountTransactions = new RetrieveAccountTransactionsRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .get(senderAccountId);
-//        System.out.println("\n--- RAW sender transactions ---");
-//        senderAccountTransactions.forEach(t -> System.out.printf(
-//                "id=%d  type=%s  amt=%.10f  rel=%d%n",
-//                t.getId(), t.getType(), t.getAmount(), t.getRelatedAccountId()));
-//        System.out.println("--------------------------------\n");
-
+        //check transfer-out in senderAccount transactions
+        List <Transaction> senderAccountTransactions = UserSteps.getAccountTransactions(userRequest, senderAccountId);
         Transaction transferOut = senderAccountTransactions.stream()
                 .filter(t -> t.getType() == TransactionType.TRANSFER_OUT)
-                .filter(t -> Math.abs(t.getAmount() - transferAmount) < EPS)
+                .filter(t -> t.getAmount().setScale(2, HALF_UP) .compareTo(transferAmount.setScale(2, HALF_UP)) == 0)
                 .filter(t -> t.getRelatedAccountId() == receiverAccountId)
                 .findFirst()
                 .orElse(null);
@@ -116,353 +77,186 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         softly.assertThat(transferOut).isNotNull();
 
         //check transfer-in in receiverAccount
-        List <Transaction> receiverAccountTransactions = new RetrieveAccountTransactionsRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .get(receiverAccountId);
-
-        Transaction transferIn = receiverAccountTransactions.stream()
-                .filter(t-> t.getType()==TransactionType.TRANSFER_IN)
-                .filter(t->Math.abs(t.getAmount()-transferAmount)<EPS)
-                .filter(t->t.getRelatedAccountId()==senderAccountId)
-                .findFirst()
-                .orElse(null);
-
+        Transaction transferIn = UserSteps.getTransferFromTransactions(userRequest,
+                receiverAccountId,senderAccountId,transferAmount, TransactionType.TRANSFER_IN);
         softly.assertThat(transferIn).isNotNull();
 
+        //check that sender's acc balance decreased by transfer amount
+        //calculate expected amount
+        BigDecimal expectedSenderAccBalance = depositAmount
+                .add(depositAmount)          // because I did two deposits to reaching out the maximum allowed transfer amount
+                .subtract(transferAmount)
+                .setScale(2, HALF_UP);
+
+         BigDecimal actualSenderAccBalance = UserSteps.getAccountBalance(userRequest, senderAccountId);
+         softly.assertThat(actualSenderAccBalance).isEqualByComparingTo(expectedSenderAccBalance);
+
+        //check thar receivers' acc balance increased by transfer amount
+        //here I only need to check that balance is equal to transferAmount
+        BigDecimal actualReceiverAccBalance =  UserSteps.getAccountBalance(userRequest, receiverAccountId);
+        softly.assertThat(actualReceiverAccBalance).isEqualByComparingTo(transferAmount);
+
+        int userId = AdminSteps.getUserId(userRequest);
+        AdminSteps.deleteUser(userId);
     }
 
     public static Stream<Arguments> invalidTransferData() {
         return Stream.of(
-                Arguments.of(5000.00f, 5100.01f, "Invalid transfer: insufficient funds or invalid accounts"),
-                Arguments.of(10000.00f, 10000.01f, "Invalid transfer: insufficient funds or invalid accounts"),
-                Arguments.of(10000.00f, 0.00f, "Invalid transfer: insufficient funds or invalid accounts"),
-                Arguments.of(10000.00f, -0.01f, "Invalid transfer: insufficient funds or invalid accounts")
-
+                Arguments.of(new BigDecimal("1000.00"), new BigDecimal("5100.00"), "Invalid transfer: insufficient funds or invalid accounts"),
+                Arguments.of(new BigDecimal("5000.00"), new BigDecimal("10000.01"), "Transfer amount cannot exceed 10000"),
+                Arguments.of(new BigDecimal("5000.00"), new BigDecimal("0.00"), "Invalid transfer: insufficient funds or invalid accounts"),
+                Arguments.of(new BigDecimal("5000.00"), new BigDecimal("-0.01"), "Invalid transfer: insufficient funds or invalid accounts")
         );
     }
 
     @ParameterizedTest
     @MethodSource("invalidTransferData")
-    public void userCanNotTransferInvalidAmountTest(Float depositAmount, Float transferAmount, String errorMessage) {
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
+    public void userCanNotTransferInvalidAmountTest(BigDecimal depositAmount, BigDecimal transferAmount, String errorMessage) {
+        CreateUserRequest userRequest = AdminSteps.createUser();
+        int senderAccountId = UserSteps.createAccountAndGetId(userRequest);
+        int receiverAccountId = UserSteps.createAccountAndGetId(userRequest);
+        // I made three deposits into sender account - because maximum deposit amount is 5000, but I need to check 10000.01 amount
+        //for this test
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
 
-        //admin creates user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-
-        //create sender account and convert response into the object
-        CreateAccountResponse createSenderAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-
-        //extract account id
-        int senderAccountId = createSenderAccount.getId();
-
-        //create sender account and convert response into the object
-        CreateAccountResponse createReceiverAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-
-        //extract account id
-        int receiverAccountId = createReceiverAccount.getId();
-
-        //prepare deposit data
-        MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(senderAccountId)
-                .balance(depositAmount)
-                .build();
-
-        //make a deposit into sender account
-        new MakeDepositRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .post(makeDepositRequest);
-
-        //prepare transfer request data
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
-                .amount(transferAmount)
-                .receiverAccountId(receiverAccountId)
                 .senderAccountId(senderAccountId)
+                .receiverAccountId(receiverAccountId)
+                .amount(transferAmount)
                 .build();
 
-        //make transfer using request above
-        new MakeTransferRequester(
+        new CrudRequester(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsBadNoMessage())
-                .post(transferRequest)
-                .body(equalTo(errorMessage));
+                Endpoint.ACCOUNT_TRANSFER,
+                ResponseSpecs.requestReturnsBadRawMessage(errorMessage))
+                .post(transferRequest);
 
+        //I need a triple deposit amount because I made tree deposits
+        BigDecimal tripleDeposit = depositAmount.add(depositAmount).add(depositAmount);
+        BigDecimal actualSenderAccBalance =  UserSteps.getAccountBalance(userRequest, senderAccountId);
+        softly.assertThat(actualSenderAccBalance).isEqualByComparingTo(tripleDeposit);
 
+        BigDecimal actualReceiverAccBalance =  UserSteps.getAccountBalance(userRequest, receiverAccountId);
+        softly.assertThat(actualReceiverAccBalance).isZero();
+
+        int userId = AdminSteps.getUserId(userRequest);
+        AdminSteps.deleteUser(userId);
     }
 
     @Test
     public void unauthorizedUserCanNotMakeTransferTest() {
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-
-        //admin creates user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-
-        //create sender account and convert response into the object
-        CreateAccountResponse createSenderAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-
-        //extract account id
-        int senderAccountId = createSenderAccount.getId();
-
-        //create sender account and convert response into the object
-        CreateAccountResponse createReceiverAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-
-        //extract account id
-        int receiverAccountId = createReceiverAccount.getId();
-
-        //prepare deposit data
-        float depositAmount = RandomData.randomTransfer(0.01f, 100.0f);
-        MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(senderAccountId)
-                .balance(depositAmount)
-                .build();
-
-        //make a deposit into sender account
-        new MakeDepositRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .post(makeDepositRequest);
-
-        //prepare transfer request data
-        float transferAmount = depositAmount;
+        CreateUserRequest userRequest = AdminSteps.createUser();
+        int senderAccountId = UserSteps.createAccountAndGetId(userRequest);
+        int receiverAccountId = UserSteps.createAccountAndGetId(userRequest);
+        BigDecimal depositAmount = RandomData.randomTransfer(new BigDecimal("100.00"), new BigDecimal("200.00"));
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
+        BigDecimal transferAmount = RandomData.randomTransfer(new BigDecimal("1.00"), depositAmount);
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
                 .amount(transferAmount)
                 .receiverAccountId(receiverAccountId)
                 .senderAccountId(senderAccountId)
                 .build();
 
-        //make transfer using request above
-        new MakeTransferRequester(
+        new CrudRequester(
                 RequestSpecs.unauthSpec(),
+                Endpoint.ACCOUNT_TRANSFER,
                 ResponseSpecs.requestReturnsUnauth())
                 .post(transferRequest);
 
-        //System.out.println("Response Body: " + response.asString());
-        //System.out.println("Response Status Code: " + response.getStatusCode());
-    }
+        //let's check that senders' and receivers' accounts balances hasn't changed
+        BigDecimal actualSenderAccBalance =  UserSteps.getAccountBalance(userRequest, senderAccountId);
+        softly.assertThat(actualSenderAccBalance).isEqualByComparingTo(depositAmount);
+
+        BigDecimal actualReceiverAccBalance =  UserSteps.getAccountBalance(userRequest, receiverAccountId);
+        softly.assertThat(actualReceiverAccBalance).isZero();
+
+        int userId = AdminSteps.getUserId(userRequest);
+        AdminSteps.deleteUser(userId);
+ }
 
     @Test
     public void userCanNotMakeTransferFromNonExistingAccountTest() {
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-
-        //admin creates user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
+        CreateUserRequest userRequest = AdminSteps.createUser();
 
         //I skip creating sender account here and use variable instead
         int nonExistingAccountId = Integer.MAX_VALUE;
+        int receiverAccountId = UserSteps.createAccountAndGetId(userRequest);
 
-        //create sender account and convert response into the object
-        CreateAccountResponse createReceiverAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-
-        //extract account id
-        int receiverAccountId = createReceiverAccount.getId();
-
-        //I don't need to make a deposit here
-        //prepare transfer request data
-        float transferAmount = RandomData.randomTransfer(1.0f, 100.0f);
+        //I don't need to make a deposit here so I proceed to preparing transfer data
+        BigDecimal transferAmount = RandomData.randomTransfer(new BigDecimal("1.00"), new BigDecimal("100.00"));
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
                 .amount(transferAmount)
                 .receiverAccountId(receiverAccountId)
                 .senderAccountId(nonExistingAccountId)
                 .build();
 
-        //make transfer using request above
-        new MakeTransferRequester(
+        new CrudRequester(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                Endpoint.ACCOUNT_TRANSFER,
                 ResponseSpecs.requestReturnsForbidden())
                 .post(transferRequest);
 
+        BigDecimal actualReceiverAccBalance =  UserSteps.getAccountBalance(userRequest, receiverAccountId);
+        softly.assertThat(actualReceiverAccBalance)
+                .as("Receiver's balance must remain unchanged")
+                .isEqualByComparingTo(new BigDecimal("0.00"));
+
+        int userId = AdminSteps.getUserId(userRequest);
+        AdminSteps.deleteUser(userId);
     }
 
     @Test
     public void userCanNotMakeTransferToNonExistingAccountTest() {
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-
-        //admin creates user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-
-        //create sender account and convert response into the object
-        CreateAccountResponse createSenderAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-
-        //extract account id
-        int senderAccountId = createSenderAccount.getId();
-
-        //prepare deposit data
-        float depositAmount = RandomData.randomTransfer(100.0f, 1000.0f);
-        MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(senderAccountId)
-                .balance(depositAmount)
-                .build();
-
-        //make a deposit into sender account
-        new MakeDepositRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .post(makeDepositRequest);
-
-        //create NonExisting Receiver account
+        CreateUserRequest userRequest =  AdminSteps.createUser();
+        int senderAccountId = UserSteps.createAccountAndGetId(userRequest);
+        BigDecimal depositAmount = RandomData.randomTransfer( new BigDecimal("100.00"), new BigDecimal("1000.00"));
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
         int receiverAccountId = Integer.MAX_VALUE;
+        BigDecimal transferAmount = depositAmount;
 
-        //prepare transfer request data
-        float transferAmount = depositAmount;
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
                 .amount(transferAmount)
                 .receiverAccountId(receiverAccountId)
                 .senderAccountId(senderAccountId)
                 .build();
 
-        //make transfer using request above
-        new MakeTransferRequester(
+        new CrudRequester(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                Endpoint.ACCOUNT_TRANSFER,
                 ResponseSpecs.requestReturnsBadNoMessage())
                 .post(transferRequest);
 
-        //get list of sender's account transactions
-        List <Transaction> senderAccountTransactions = new RetrieveAccountTransactionsRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .get(senderAccountId);
-//
-// check sender account transactions for our transfer
-        Transaction transferOut = senderAccountTransactions.stream()
-                .filter(t -> t.getType() == TransactionType.TRANSFER_OUT)
-                .filter(t -> Math.abs(t.getAmount() - transferAmount) < EPS)
-                .filter(t -> t.getRelatedAccountId() == receiverAccountId)
-                .findFirst()
-                .orElse(null);
-
+        Transaction transferOut = UserSteps.getTransferFromTransactions
+                (userRequest, senderAccountId, receiverAccountId, transferAmount, TransactionType.TRANSFER_OUT);
         softly.assertThat(transferOut).isNull();
 
+        Transaction transferIn = UserSteps.getTransferFromTransactions
+                (userRequest, senderAccountId, receiverAccountId, transferAmount, TransactionType.TRANSFER_IN);
+        softly.assertThat(transferIn).isNull();
     }
     @Test
-    public void userCanNotMakeTransferToSendingAccountTest() {
-        //create user request
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
+    public void userCanMakeTransferToSendingAccountTest() {
+        CreateUserRequest userRequest = AdminSteps.createUser();
+        int senderAccountId = UserSteps.createAccountAndGetId(userRequest);
+        BigDecimal depositAmount = RandomData.randomTransfer( new BigDecimal("100.00"), new BigDecimal("1000.00"));
+        UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
+        BigDecimal transferAmount = depositAmount;
+        UserSteps.makeTransfer(transferAmount, senderAccountId, senderAccountId, userRequest);
 
-        //admin creates user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
+        Transaction transferOut = UserSteps.getTransferFromTransactions
+                (userRequest, senderAccountId, senderAccountId,  transferAmount, TransactionType.TRANSFER_OUT);
 
-        //create sender account and convert response into the object
-        CreateAccountResponse createSenderAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
+        softly.assertThat(transferOut).isNotNull();
 
-        //extract account id
-        int senderAccountId = createSenderAccount.getId();
+        BigDecimal actualSenderAccBalance = UserSteps.getAccountBalance(userRequest, senderAccountId);
+        softly.assertThat(actualSenderAccBalance)
+                .as("Sender account balance must remain unchanged")
+                .isEqualByComparingTo(depositAmount);
 
-        //prepare deposit data
-        float depositAmount = RandomData.randomTransfer(100.0f, 1000.0f);
-        MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(senderAccountId)
-                .balance(depositAmount)
-                .build();
-
-        //make a deposit into sender account
-        new MakeDepositRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .post(makeDepositRequest);
-
-        //prepare transfer request data where sender==receiver and sender is exists
-        float transferAmount = depositAmount;
-        MakeTransferRequest transferRequest = MakeTransferRequest.builder()
-                .amount(transferAmount)
-                .receiverAccountId(senderAccountId)
-                .senderAccountId(senderAccountId)
-                .build();
-
-        //make transfer using request above
-        new MakeTransferRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsBadNoMessage())
-                .post(transferRequest);
-
-        //check if transfer really wasn't sent
-        //get list of all acc's trabsactions
-        List <Transaction> senderAccountTransactions = new RetrieveAccountTransactionsRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .get(senderAccountId);
-
-        //try to find our transaction
-        Transaction transferOut = senderAccountTransactions.stream()
-                .filter(t -> t.getType() == TransactionType.TRANSFER_OUT)
-                .filter(t -> Math.abs(t.getAmount() - transferAmount) < EPS)
-                .filter(t -> t.getRelatedAccountId() == senderAccountId)
-                .findFirst()
-                .orElse(null);
-
-        //check that we didn't find a transaction
-        softly.assertThat(transferOut).isNull();
-
+        int userId = AdminSteps.getUserId(userRequest);
+        AdminSteps.deleteUser(userId);
     }
 }
 
