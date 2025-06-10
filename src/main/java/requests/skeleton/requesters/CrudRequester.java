@@ -1,11 +1,9 @@
 package requests.skeleton.requesters;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import io.restassured.response.ValidatableResponse;
 import io.restassured.specification.RequestSpecification;
 import io.restassured.specification.ResponseSpecification;
 import models.BaseModel;
-import models.GetAccountTransactionsResponse;
 import requests.skeleton.Endpoint;
 import requests.skeleton.HttpRequest;
 import requests.skeleton.interfaces.CrudEndpointInterface;

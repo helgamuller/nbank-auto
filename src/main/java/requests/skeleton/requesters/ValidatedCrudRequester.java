@@ -1,20 +1,13 @@
 package requests.skeleton.requesters;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.restassured.mapper.ObjectMapperDeserializationContext;
-import io.restassured.mapper.ObjectMapperSerializationContext;
+
 import io.restassured.specification.RequestSpecification;
 import io.restassured.specification.ResponseSpecification;
 import models.BaseModel;
-import models.CheckUsersAccounts;
-import models.CreateAccountResponse;
 import requests.skeleton.Endpoint;
 import requests.skeleton.HttpRequest;
 import requests.skeleton.interfaces.CrudEndpointInterface;
 
-import java.util.List;
 
 //use this requester for positive tests
 public class ValidatedCrudRequester<T> extends HttpRequest implements CrudEndpointInterface {

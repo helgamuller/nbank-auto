@@ -1,6 +1,5 @@
 package iteration1;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import models.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
