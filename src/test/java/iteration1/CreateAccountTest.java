@@ -37,6 +37,6 @@ public class CreateAccountTest extends BaseTest {
                         .anyMatch(acc -> acc.getId() == accountId));
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 }

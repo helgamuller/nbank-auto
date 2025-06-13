@@ -25,29 +25,30 @@ public class CreateUserTest extends BaseTest{
     public void adminCanCreateUserWithValidData() throws NoSuchFieldException, IllegalAccessException {
         CreateUserRequest userRequest =
                 RandomModelGenerator.generate(CreateUserRequest.class);
-
         CreateUserResponse createUserResponse = new ValidatedCrudRequester<CreateUserResponse>
                 (RequestSpecs.adminSpec(),
                         Endpoint.ADMIN_USER,
                         ResponseSpecs.entityWasCreated())
                 .post(userRequest);
-
+        userId = AdminSteps.getUserId(userRequest);
         ModelAssertions.assertThatModels(userRequest, createUserResponse).match();
-        int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 
     public static Stream<Arguments> userInvalidData(){
         return Stream.of(
-                Arguments.of("   ", "Password33$", "USER", "username", "Username cannot be blank"),
-                Arguments.of("ab", "Password33$", "USER", "username", "Username must be between 3 and 15 characters"),
-                Arguments.of("abc$", "Password33$", "USER", "username", "Username must contain only letters, digits, dashes, underscores, and dots"),
-                Arguments.of("abc%", "Password33$", "USER", "username", "Username must contain only letters, digits, dashes, underscores, and dots")
+                Arguments.of("   ", "Password33$", "USER", "username", new String[]{
+                        "Username must contain only letters, digits, dashes, underscores, and dots",
+                        "Username cannot be blank"
+                }),
+                Arguments.of("ab", "Password33$", "USER", "username", new String[]{"Username must be between 3 and 15 characters"}),
+                Arguments.of("abc$", "Password33$", "USER", "username", new String[]{"Username must contain only letters, digits, dashes, underscores, and dots"}),
+                Arguments.of("abc%", "Password33$", "USER", "username", new String[]{"Username must contain only letters, digits, dashes, underscores, and dots"})
         );
     }
     @ParameterizedTest
     @MethodSource("userInvalidData")
-    public void adminCanNotCreateUserWithInvalidData(String username, String password, String role, String errorKey, String errorValue){
+    public void adminCanNotCreateUserWithInvalidData(String username, String password, String role, String errorKey, String[] errorValue){
         CreateUserRequest userRequest = CreateUserRequest.builder()
                 .username(username) //I use here parameter from method source because I need specific data to be checked and lead to fail
                 .password(password)

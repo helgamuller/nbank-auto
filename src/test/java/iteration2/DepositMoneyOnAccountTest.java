@@ -69,7 +69,7 @@ public class DepositMoneyOnAccountTest extends BaseTest {
                 .isEqualByComparingTo(amount);
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 
     public static Stream<Arguments> invalidDepositData() {
@@ -109,7 +109,7 @@ public class DepositMoneyOnAccountTest extends BaseTest {
                 .isEqualByComparingTo("0.00");
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
     @Test
     public void unauthorizedUserCanNotMakeDepositTest() {
@@ -140,7 +140,7 @@ public class DepositMoneyOnAccountTest extends BaseTest {
                 .isEqualTo("0.00");
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 
     @Test

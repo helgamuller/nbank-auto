@@ -27,6 +27,7 @@ public class NameChangeTest extends BaseTest {
         CreateUserRequest userRequest = AdminSteps.createUser();
         //create requestJSON
         ChangeNameRequest changeName = RandomModelGenerator.generate(ChangeNameRequest.class);
+
         //change a name via validated requester with response model as a parameter
          ChangeNameResponse changeNameResponse =  new ValidatedCrudRequester<ChangeNameResponse>(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
@@ -51,7 +52,7 @@ public class NameChangeTest extends BaseTest {
                 .isEqualTo(changeName.getName());
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
 
     }
     public static Stream<Arguments> invalidNameData(){
@@ -90,7 +91,7 @@ public class NameChangeTest extends BaseTest {
         softly.assertThat(checkProfile.getName()).isNull();
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
     @Test
     public void unauthorizedUserCanNotChangeNameTest() {

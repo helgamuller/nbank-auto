@@ -41,6 +41,6 @@ public class LoginUserTest extends BaseTest{
                 .header("Authorization", Matchers.notNullValue());
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 }

@@ -97,7 +97,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         softly.assertThat(actualReceiverAccBalance).isEqualByComparingTo(transferAmount);
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 
     public static Stream<Arguments> invalidTransferData() {
@@ -142,7 +142,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         softly.assertThat(actualReceiverAccBalance).isZero();
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 
     @Test
@@ -173,7 +173,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         softly.assertThat(actualReceiverAccBalance).isZero();
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
  }
 
     @Test
@@ -204,7 +204,7 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .isEqualByComparingTo(new BigDecimal("0.00"));
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
+
     }
 
     @Test
@@ -235,6 +235,8 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         Transaction transferIn = UserSteps.getTransferFromTransactions
                 (userRequest, senderAccountId, receiverAccountId, transferAmount, TransactionType.TRANSFER_IN);
         softly.assertThat(transferIn).isNull();
+
+        int userId= AdminSteps.getUserId(userRequest);
     }
     @Test
     public void userCanMakeTransferToSendingAccountTest() {
@@ -256,7 +258,6 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .isEqualByComparingTo(depositAmount);
 
         int userId = AdminSteps.getUserId(userRequest);
-        AdminSteps.deleteUser(userId);
     }
 }
 

@@ -5,6 +5,7 @@ import io.restassured.specification.ResponseSpecification;
 import org.apache.http.HttpStatus;
 import org.hamcrest.Matchers;
 
+
 public class ResponseSpecs {
     private ResponseSpecs() {
     }
@@ -28,11 +29,14 @@ public class ResponseSpecs {
     }
 
     //400 with json response
-    public static ResponseSpecification requestReturnsBadRequest(String errorKey, String errorValue) {
-        return defaultResponseBuilder()
-                .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
-                .expectBody(errorKey, Matchers.equalTo(errorValue))
-                .build();
+    //В Rest-assured при обращении к массиву возвращается java.util.List, поэтому матчеры должны работать с коллекцией.
+    public static ResponseSpecification requestReturnsBadRequest(String errorKey, String... errorMessages) {
+        ResponseSpecBuilder builder =  defaultResponseBuilder()
+                .expectStatusCode(HttpStatus.SC_BAD_REQUEST);
+        for(String msg: errorMessages){
+            builder.expectBody(errorKey, Matchers.hasItem(msg));
+        }
+        return builder.build();
     }
 
     //400 without response?
