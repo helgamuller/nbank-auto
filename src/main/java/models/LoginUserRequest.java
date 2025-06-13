@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@AllArgsConstructor //generate all thes staff int bite code
+@AllArgsConstructor //generate all these staff int bite code
 @NoArgsConstructor
 @Builder
 public class LoginUserRequest extends BaseModel{

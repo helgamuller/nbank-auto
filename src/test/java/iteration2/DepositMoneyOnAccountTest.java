@@ -3,195 +3,152 @@ package iteration2;
 import generators.RandomData;
 import iteration1.BaseTest;
 import models.*;
-import org.assertj.core.api.BooleanAssert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import requests.AdminCreateUserRequester;
-import requests.CreateAccountRequester;
-import requests.MakeDepositRequester;
-import requests.RetrieveAccountTransactionsRequester;
+import requests.skeleton.Endpoint;
+import requests.skeleton.requesters.CrudRequester;
+import requests.skeleton.requesters.ValidatedCrudRequester;
+import requests.steps.AdminSteps;
+import requests.steps.UserSteps;
 import specs.RequestSpecs;
 import specs.ResponseSpecs;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class DepositMoneyOnAccountTest extends BaseTest {
 
-
     public static Stream<Arguments> validDepositData() {
         return Stream.of(
-                Arguments.of(0.01f),
-                Arguments.of(4999.99f),
-                Arguments.of(5000.00f),
-                Arguments.of(100.00f)
-
+                Arguments.of(new BigDecimal("0.01")),
+                Arguments.of(new BigDecimal("4999.99")),
+                Arguments.of(new BigDecimal("5000.00"))
         );
     }
 
     @ParameterizedTest
     @MethodSource("validDepositData")
-    public void userCanDepositValidAmountTest(Float amount) {
-        //create user data
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-        //admin create user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-        //create new account  and return response as an object
-        CreateAccountResponse createAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-        //extract account id
-        int account = createAccount.getId();
+    public void userCanDepositValidAmountTest(BigDecimal amount) {
+        CreateUserRequest userRequest = AdminSteps.createUser();
+        int accountId = UserSteps.createAccountAndGetId(userRequest);
 
-        //make a deposit
+        //make a deposit request
         MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(account)
+                .id(accountId)
                 .balance(amount)
                 .build();
 
-        CreateAccountResponse makeDeposit = new MakeDepositRequester(
+        CreateAccountResponse makeDeposit = new ValidatedCrudRequester<CreateAccountResponse>(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                Endpoint.ACCOUNTS_DEPOSIT,
                 ResponseSpecs.requestReturnsOk())
-                .post(makeDepositRequest)
-                .extract()
-                .as(CreateAccountResponse.class);
+                .post(makeDepositRequest);
 
-        List<Transaction> transactions = makeDeposit.getTransactions();
-        boolean isDepositFound = transactions.stream()
+        //Check that transaction==deposit exists in a list of account's transactions
+        List<Transaction> accountTransactions = makeDeposit.getTransactions();
+        boolean isDepositFound = accountTransactions.stream()
                 .anyMatch(transaction -> TransactionType.DEPOSIT.equals(transaction.getType()) &&
-                (transaction.getAmount()==amount));
+                (transaction.getAmount().compareTo(amount) == 0));
+        softly.assertThat(isDepositFound)
+                .as("Deposit transaction should be present in response")
+                .isTrue();
 
-        BooleanAssert isDepositFoundInResponse = softly.assertThat(isDepositFound).isTrue();
+        //1. get list of transactions (model.Transactions) from transactions endpoint for our accountId
+        List<Transaction> transactions =  UserSteps.getAccountTransactions(userRequest, accountId);
+        softly.assertThat(transactions)
+                .as("Full transaction list should include the deposit transaction(s)")
+                .containsAll(accountTransactions);
 
+        BigDecimal balance = UserSteps.getAccountBalance(userRequest, accountId);
+        softly.assertThat(balance)
+                .as("Account balance should equal deposit amount")
+                .isEqualByComparingTo(amount);
 
-        //1. get list of transactions as a list of model.Transactions
-        List <Transaction> accountTransactions = new RetrieveAccountTransactionsRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsOk())
-                .get(account);
-        //check that deposit transactions exist on transactions endpoint
-
-        assertEquals(accountTransactions, transactions);
+        int userId = AdminSteps.getUserId(userRequest);
 
     }
 
     public static Stream<Arguments> invalidDepositData() {
         return Stream.of(
-                Arguments.of(0.0f),
-                Arguments.of(-0.01f),
-                Arguments.of(5000.01f)
-                //Arguments.of("string")
-
+                Arguments.of(new BigDecimal("0.00"), "Invalid account or amount"),
+                Arguments.of(new BigDecimal("-0.01"), "Invalid account or amount"),
+                Arguments.of(new BigDecimal("5000.01"), "Deposit amount exceeds the 5000 limit")
         );
     }
-
     @ParameterizedTest
     @MethodSource("invalidDepositData")
-    public void userCanNotDepositInvalidAmountTest(Float amount) {
-        //create user by admin
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-        //admin create user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-        //create new account  and return response as an object
-        CreateAccountResponse createAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-        //extract account id
-        int account = createAccount.getId();
+    public void userCanNotDepositInvalidAmountTest(BigDecimal amount, String errorMessage) {
+        //user is created by admin
+        CreateUserRequest userRequest = AdminSteps.createUser();
+        int accountId = UserSteps.createAccountAndGetId(userRequest);
 
-        //make a deposit
-        MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(account)
-                .balance(amount)
-                .build();
+        //user makes a deposit
+       MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
+               .balance(amount)
+               .id(accountId)
+               .build();
 
-                 new MakeDepositRequester(
+        new CrudRequester(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.requestReturnsBadNoMessage())
+                Endpoint.ACCOUNTS_DEPOSIT,
+                ResponseSpecs.requestReturnsBadRawMessage(errorMessage))
                 .post(makeDepositRequest);
 
+        List<Transaction> transactions =  UserSteps.getAccountTransactions(userRequest, accountId);
+        BigDecimal balance =  UserSteps.getAccountBalance(userRequest, accountId);
 
-                //.statusCode(HttpStatus.SC_BAD_REQUEST);
-        //check if deposit contains provided value
+        softly.assertThat(transactions)
+                .as("No transactions should be recorded when deposit is rejected")
+                .isEmpty();
+        softly.assertThat(balance)
+                .as("Balance must remain unchanged")
+                .isEqualByComparingTo("0.00");
+
+        int userId = AdminSteps.getUserId(userRequest);
 
     }
     @Test
     public void unauthorizedUserCanNotMakeDepositTest() {
-        Float amount = RandomData.randomTransfer(1.0f, 100.0f);
+        BigDecimal amount = RandomData.randomTransfer(new BigDecimal("1.00"),new BigDecimal("100.00"));
         //create user by admin
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-        //admin create user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-        //create new account  and return response as an object
-        CreateAccountResponse createAccount = new CreateAccountRequester(
-                RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
-                ResponseSpecs.entityWasCreated())
-                .post(null)
-                .extract()
-                .as(CreateAccountResponse.class);
-        //extract account id
-        int account = createAccount.getId();
+        CreateUserRequest userRequest = AdminSteps.createUser();
+        int accountId = UserSteps.createAccountAndGetId(userRequest);
 
-        //make a deposit
+        //make a deposit request
         MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
-                .id(account)
+                .id(accountId)
                 .balance(amount)
                 .build();
 
-        new MakeDepositRequester(
+        new CrudRequester(
                 RequestSpecs.unauthSpec(),
+                Endpoint.ACCOUNTS_DEPOSIT,
                 ResponseSpecs.requestReturnsUnauth())
                 .post(makeDepositRequest);
 
+        List<Transaction> transactions =  UserSteps.getAccountTransactions(userRequest, accountId);
+        BigDecimal balance =  UserSteps.getAccountBalance(userRequest, accountId);
+        softly.assertThat(transactions)
+                .as("No transactions should be recorded when deposit is rejected")
+                .isEmpty();
+        softly.assertThat(balance)
+                .as("Balance must remain unchanged")
+                .isEqualTo("0.00");
+
+        int userId = AdminSteps.getUserId(userRequest);
 
     }
+
     @Test
     public void userCanNotMakeDepositToAccountWhichNotExistsTest(){
         //create user by admin
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUserName())
-                .password(RandomData.getUserPassword())
-                .role(UserRole.USER.toString())
-                .build();
-        //admin create user
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-
+        CreateUserRequest userRequest = AdminSteps.createUser();
         int account = Integer.MAX_VALUE;
-        float amount = RandomData.randomTransfer(1.0f, 100.0f);
+        BigDecimal amount = RandomData.randomTransfer(new BigDecimal("1.00"),new BigDecimal("100.00"));
 
         //make a deposit
         MakeDepositRequest makeDepositRequest = MakeDepositRequest.builder()
@@ -199,9 +156,11 @@ public class DepositMoneyOnAccountTest extends BaseTest {
                 .balance(amount)
                 .build();
 
-        new MakeDepositRequester(
+        new CrudRequester(
                 RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                Endpoint.ACCOUNTS_DEPOSIT,
                 ResponseSpecs.requestReturnsForbidden())
                 .post(makeDepositRequest);
+
     }
 }
