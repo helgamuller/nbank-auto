@@ -5,8 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.ZonedDateTime;
-import java.util.List;
+import java.math.BigDecimal;
+
 
 @Data
 @AllArgsConstructor //generate all these staff int bite code
@@ -14,7 +14,8 @@ import java.util.List;
 @Builder
 public class Transaction extends BaseModel{
     private int id;
-    private float amount;
+    //private float amount;
+    private BigDecimal amount;
     private TransactionType type;
     private String timestamp;
     private int relatedAccountId;
