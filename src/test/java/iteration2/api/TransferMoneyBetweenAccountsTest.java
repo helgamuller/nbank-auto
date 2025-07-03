@@ -1,7 +1,7 @@
-package iteration2;
+package iteration2.api;
 
 import generators.RandomData;
-import iteration1.BaseTest;
+import iteration1.api.BaseTest;
 import models.*;
 import models.comparison.ModelAssertions;
 import org.junit.jupiter.api.Test;
@@ -214,10 +214,10 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
         BigDecimal depositAmount = RandomData.randomTransfer( new BigDecimal("100.00"), new BigDecimal("1000.00"));
         UserSteps.makeDeposit(depositAmount, senderAccountId, userRequest);
         int receiverAccountId = Integer.MAX_VALUE;
-        BigDecimal transferAmount = depositAmount;
+        //BigDecimal transferAmount = depositAmount;
 
         MakeTransferRequest transferRequest = MakeTransferRequest.builder()
-                .amount(transferAmount)
+                .amount(depositAmount)
                 .receiverAccountId(receiverAccountId)
                 .senderAccountId(senderAccountId)
                 .build();
@@ -229,11 +229,11 @@ public class TransferMoneyBetweenAccountsTest extends BaseTest {
                 .post(transferRequest);
 
         Transaction transferOut = UserSteps.getTransferFromTransactions
-                (userRequest, senderAccountId, receiverAccountId, transferAmount, TransactionType.TRANSFER_OUT);
+                (userRequest, senderAccountId, receiverAccountId, depositAmount, TransactionType.TRANSFER_OUT);
         softly.assertThat(transferOut).isNull();
 
         Transaction transferIn = UserSteps.getTransferFromTransactions
-                (userRequest, senderAccountId, receiverAccountId, transferAmount, TransactionType.TRANSFER_IN);
+                (userRequest, senderAccountId, receiverAccountId, depositAmount, TransactionType.TRANSFER_IN);
         softly.assertThat(transferIn).isNull();
 
         int userId= AdminSteps.getUserId(userRequest);

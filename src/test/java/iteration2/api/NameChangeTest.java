@@ -1,7 +1,7 @@
-package iteration2;
+package iteration2.api;
 
 import generators.RandomModelGenerator;
-import iteration1.BaseTest;
+import iteration1.api.BaseTest;
 import models.ChangeNameRequest;
 import models.ChangeNameResponse;
 import models.CreateUserRequest;
@@ -100,8 +100,8 @@ public class NameChangeTest extends BaseTest {
         new CrudRequester(
                 RequestSpecs.unauthSpec(),
                 Endpoint.CUSTOMER_PROFILE,
-                ResponseSpecs.requestReturnsUnauth()
-        );
+                ResponseSpecs.requestReturnsUnauth())
+                .update(changeName);
 
     }
 }

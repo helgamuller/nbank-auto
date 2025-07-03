@@ -41,4 +41,5 @@ public class RandomData {
                 .movePointLeft(2)
                 .setScale(2, RoundingMode.UNNECESSARY);
     }
+
 }

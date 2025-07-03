@@ -1,4 +1,4 @@
-package iteration1;
+package iteration1.api;
 
 import generators.RandomModelGenerator;
 import models.CreateUserRequest;
@@ -43,8 +43,16 @@ public class CreateUserTest extends BaseTest{
                 }),
                 Arguments.of("ab", "Password33$", "USER", "username", new String[]{"Username must be between 3 and 15 characters"}),
                 Arguments.of("abc$", "Password33$", "USER", "username", new String[]{"Username must contain only letters, digits, dashes, underscores, and dots"}),
-                Arguments.of("abc%", "Password33$", "USER", "username", new String[]{"Username must contain only letters, digits, dashes, underscores, and dots"})
-        );
+                Arguments.of("abc%", "Password33$", "USER", "username", new String[]{"Username must contain only letters, digits, dashes, underscores, and dots"}),
+                Arguments.of("absabsabsabsbas1", "Password33$", "USER", "username", new String[]{"Username must be between 3 and 15 characters"}),
+                Arguments.of("abs1", "Pswor3$", "USER", "password", new String[]{"Password must contain at least one digit, one lower case, one upper case, one special character, no spaces, and be at least 8 characters long"}),
+                Arguments.of("abs1", "PworTR$qP", "USER", "password", new String[]{"Password must contain at least one digit, one lower case, one upper case, one special character, no spaces, and be at least 8 characters long"}),
+                Arguments.of("abs1", "aworaa$qa3", "USER", "password", new String[]{"Password must contain at least one digit, one lower case, one upper case, one special character, no spaces, and be at least 8 characters long"}),
+                Arguments.of("abs1", "PWORTR$PP3", "USER", "password", new String[]{"Password must contain at least one digit, one lower case, one upper case, one special character, no spaces, and be at least 8 characters long"}),
+                Arguments.of("abs1", "PworTRaq3P", "USER", "password", new String[]{"Password must contain at least one digit, one lower case, one upper case, one special character, no spaces, and be at least 8 characters long"}),
+                Arguments.of("abs1", "Pwor TRa3$qqP", "USER", "password", new String[]{"Password must contain at least one digit, one lower case, one upper case, one special character, no spaces, and be at least 8 characters long"})
+
+                );
     }
     @ParameterizedTest
     @MethodSource("userInvalidData")
