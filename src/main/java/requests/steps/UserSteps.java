@@ -1,6 +1,10 @@
 package requests.steps;
 
+import com.codeborne.selenide.Selectors;
+import com.codeborne.selenide.Selenide;
+import generators.RandomModelGenerator;
 import models.*;
+import org.openqa.selenium.Alert;
 import requests.skeleton.Endpoint;
 import requests.skeleton.requesters.CrudRequester;
 import requests.skeleton.requesters.ValidatedCrudRequester;
@@ -11,7 +15,9 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.codeborne.selenide.Selenide.*;
 import static java.math.RoundingMode.HALF_UP;
+
 
 public class UserSteps {
 
@@ -23,6 +29,16 @@ public class UserSteps {
                 .post(null)
                 .extract()
                 .path("id");
+    }
+
+    public static String createAccountAndGetNumber(CreateUserRequest user){
+        return new CrudRequester(
+                RequestSpecs.authAsUserSpec(user.getUsername(), user.getPassword()),
+                Endpoint.ACCOUNTS,
+                ResponseSpecs.entityWasCreated())
+                .post(null)
+                .extract()
+                .path("accountNumber");
     }
 
     public static BigDecimal getAccountBalance(CreateUserRequest userRequest, int accountId){
@@ -37,7 +53,21 @@ public class UserSteps {
                 .map(CreateAccountResponse::getBalance)
                 .findFirst()
                 .orElseThrow()
-                .setScale(2, HALF_UP);
+                .setScale(2, HALF_UP);}
+
+        public static BigDecimal getAccountBalanceByAccNumber(CreateUserRequest userRequest, String accNumber){
+            CreateAccountResponse[] accountResponse = new ValidatedCrudRequester<CreateAccountResponse[]>(
+                    RequestSpecs.authAsUserSpec(userRequest.getUsername(), userRequest.getPassword()),
+                    Endpoint.CUSTOMER_ACCOUNTS,
+                    ResponseSpecs.requestReturnsOk())
+                    .getAll();
+
+            return Arrays.stream(accountResponse)          // можно даже без intermediate List
+                    .filter(a -> a.getAccountNumber().equals(accNumber))
+                    .map(CreateAccountResponse::getBalance)
+                    .findFirst()
+                    .orElseThrow()
+                    .setScale(2, HALF_UP);
         //create a list of objects from array
 //        List<CreateAccountResponse> accountList =
 //                Arrays.stream(accountResponse)          // поток элементов массива в список
@@ -102,5 +132,31 @@ public class UserSteps {
                 .filter(t -> t.getRelatedAccountId() == counterPartyId)
                 .findFirst()
                 .orElse(null);
+    }
+    public static void saveAuthHeaderToLocalStorage(CreateUserRequest user){
+        String userAuthHeader = new CrudRequester(
+                RequestSpecs.unauthSpec(),
+                Endpoint.LOGIN,
+                ResponseSpecs.requestReturnsOk())
+                .post(LoginUserRequest.builder().username(user.getUsername()).password(user.getPassword()).build())
+                .extract()
+                .header("Authorization");
+
+        Selenide.open("/");
+        executeJavaScript("localStorage.setItem('authToken', arguments[0]);", userAuthHeader);
+    }
+    public static String userChangesTheirName(CreateUserRequest user){
+        String name = RandomModelGenerator.generate(ChangeNameRequest.class).getName();
+        ChangeNameRequest changeName = ChangeNameRequest.builder()
+                .name(name)
+                .build();
+        //change a name
+        new CrudRequester(
+                RequestSpecs.authAsUserSpec(user.getUsername(), user.getPassword()),
+                Endpoint.CUSTOMER_PROFILE,
+                ResponseSpecs.requestReturnsOk())
+                .update(changeName);
+
+        return name;
     }
 }
